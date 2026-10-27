@@ -52,11 +52,21 @@ def vozes_say() -> list[dict]:
         return []
     res = []
     for line in out.splitlines():
-        m = re.match(r"^(.*?)\s{2,}([a-z]{2}_[A-Z]{2})\s", line)
+        m = re.match(r"^(.*?)\s+([a-z]{2}_[A-Z]{2})\s", line)  # nomes longos ficam a um só espaço da língua
         if not m:
             continue
         nome, loc = m.group(1).strip(), m.group(2)
-        res.append({"id": f"say:{nome}", "label": f"{nome} (Apple)", "lang": loc, "source": "apple", "installed": True})
+        # "Joana (Enhanced)" → "Joana melhorada (Apple)"; "Joana (Premium)" → "Joana Premium (Apple)"
+        base, _, var = nome.partition(" (")
+        var = var.rstrip(")")
+        qual = {"Enhanced": "melhorada", "Premium": "Premium"}.get(var, var)
+        label = f"{base} {qual} (Apple)" if qual else f"{base} (Apple)"
+        res.append({"id": f"say:{nome}", "label": label, "lang": loc, "source": "apple", "installed": True, "_base": base, "_var": var})
+    # com a versão melhorada/Premium instalada, a compacta do mesmo nome deixa de interessar
+    melhores = {(r["_base"], r["lang"]) for r in res if r["_var"] in ("Enhanced", "Premium")}
+    res = [r for r in res if r["_var"] or (r["_base"], r["lang"]) not in melhores]
+    for r in res:
+        r.pop("_base"); r.pop("_var")
     return res
 
 

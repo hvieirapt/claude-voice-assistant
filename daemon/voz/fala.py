@@ -54,12 +54,8 @@ class Fala:
     def start(self) -> None:
         # pipeline: a fila de frases alimenta um produtor (gera áudio à frente) e um leitor (toca por ordem)
         self._play_q: asyncio.Queue = asyncio.Queue(maxsize=3)
-        if self.cfg["backend"] == "say" and self.cfg.get("prefer_premium", True):
-            instaladas = vozes_say()
-            for suf in (" (Premium)", " (Enhanced)"):
-                if self.voice + suf in instaladas:
-                    self.voice = self.voice + suf
-                    break
+        if self.cfg["backend"] == "say":
+            self.voice = self._melhor_say(self.voice)
             log.info("voz: %s", self.voice)
         elif self.cfg["backend"] == "mlx":
             try:
@@ -88,6 +84,16 @@ class Fala:
 
         return procurar(lang or self.cfg.get("lang", "pt_PT"), None, self.refs())
 
+    def _melhor_say(self, nome: str) -> str:
+        """Com prefer_premium, "Joana" passa a "Joana (Premium)" ou "Joana (Enhanced)" se estiver instalada."""
+        if not self.cfg.get("prefer_premium", True) or "(" in nome:
+            return nome
+        instaladas = vozes_say()
+        for suf in (" (Premium)", " (Enhanced)"):
+            if nome + suf in instaladas:
+                return nome + suf
+        return nome
+
     def voz_actual(self) -> str:
         b = self.cfg["backend"]
         if b == "mlx":
@@ -104,7 +110,7 @@ class Fala:
         kind, _, rest = voz_id.partition(":")
         if kind == "say":
             self.cfg["backend"] = "say"
-            self.voice = rest or str(self.cfg["voice"])
+            self.voice = self._melhor_say(rest or str(self.cfg["voice"]))
             return f"say/{self.voice}"
         if kind == "piper":
             modelo = piper_model_path(rest)
