@@ -1,0 +1,77 @@
+# Configuração do voz. Todos os valores têm defaults; sobrepõe só o que quiseres.
+# Procura-se config.toml na pasta actual, depois na pasta do voz, depois em ~/.voz/config.toml.
+
+[audio]
+input_device = ""   # microfone fixo (substring do nome ou índice). Vazio = dispositivo por omissão.
+                           # O app só captura este dispositivo; nunca o som do sistema ou de outras apps.
+sample_rate = 16000
+
+[vad]
+mode = "auto"              # "auto": detecta quando falas; "ptt": só grava enquanto carregas (botão no painel ou Espaço)
+start_threshold = 0.45     # Silero: 0,3 muito sensível, 0,6 só voz clara (o Handy usa 0,3)
+end_threshold = 0.3
+min_speech_ms = 100        # onset mínimo
+silence_ms = 450           # silêncio que fecha uma frase (vai para transcrição)
+turn_gap_ms = 1200         # pausa sem voltares a falar que fecha a mensagem inteira (daemon/mod)
+pre_roll_ms = 450
+max_utterance_s = 60
+barge_in = true            # interromper a voz quando falas por cima (modo auto)
+barge_in_threshold = 0.85
+barge_in_min_ms = 350
+interrupt_min_s = 1.0      # uma interrupção só conta com pelo menos este áudio…
+interrupt_min_words = 3    # …e estas palavras; senão a voz retoma onde ia
+
+[stt]
+model = "mlx-community/whisper-large-v3-turbo"
+language = "pt"
+min_duration_s = 0.3       # um "sim" rápido dura ~0,4 s
+initial_prompt = ""        # vazio = prompt por língua (ver vozes.PROMPTS); pt-PT puxa a ortografia europeia
+live = true                # texto ao vivo enquanto falas, com o Parakeet (MLX); o Whisper faz a passagem final
+live_model = "mlx-community/parakeet-tdt-0.6b-v3"
+
+[cleanup]
+mode = "regras"            # "off" | "regras" (muletas e repetições, determinístico) | "modelo" (regras + Qwen3-4B em MLX com guardas)
+model = "mlx-community/Qwen3-4B-4bit"
+
+[falante]
+enabled = false            # reescrita por modelo local. Desligado: o Claude já responde em estilo falado e
+                           # vai directo para a voz em streaming (mais rápido e sem alterar o sentido).
+base_url = "http://localhost:1234/v1"
+model = "falante"
+max_sentences = 4
+passthrough_max_chars = 350
+timeout_s = 60
+
+[tts]
+backend = "mlx"            # "mlx" (Qwen3-TTS neural, clona uma voz pt-PT), "say" (macOS) ou "piper"
+voice = "Joana"            # say: nome da voz; piper: caminho do .onnx
+prefer_premium = true      # say: usa "Joana (Premium)"/"(Enhanced)" se estiver instalada
+rate = 185                 # say: palavras por minuto
+# Qwen3-TTS: com mlx_ref_audio clona essa voz (10-20 s em pt-PT; o .txt ao lado tem a transcrição).
+# Grava a tua própria voz como referência com:  voz --gravar-ref
+# Sem referência usa uma das vozes de fábrica (mlx_voice), que soam a pt-BR.
+mlx_model = "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit"
+mlx_ref_audio = "ref/joana-pt.wav"   # relativo à pasta do voz; ou ~/.voz/ref.wav depois de --gravar-ref
+mlx_ref_text = ""                     # vazio = lê o .txt com o mesmo nome
+mlx_voice = "Serena"
+mlx_lang = "pt"
+
+[claude]
+permission_mode = "acceptEdits"
+model = "sonnet"           # conversa: sonnet é bem mais rápido; "opus" ou vazio para o default do Claude Code
+max_turns = 0
+
+[ui]
+enabled = true
+port = 8765
+ack_sound = true           # toque curto quando a tua frase é aceite
+
+[meeting]
+input_device = ""   # microfone usado em modo reunião (apanha a sala); vazio = manter o actual
+threshold = 0.7                # semelhança de voz a partir da qual é a mesma pessoa (0,6 mais permissivo, 0,8 mais exigente)
+silence_ms = 900               # em reunião as pessoas fazem pausas maiores antes de a frase fechar
+
+[keywords]
+dynamic = true             # frases curtas sem semente conhecida são classificadas pelo modelo local (qualquer língua)
+model = "mlx-community/Qwen3-4B-4bit"
+max_words = 6              # só frases até este tamanho podem ser comandos (saltar / calar / parar)

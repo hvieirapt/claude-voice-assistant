@@ -1,0 +1,13 @@
+{
+  "name": "claude-voice-assistant",
+  "owner": {
+    "name": "Hugo Vieira"
+  },
+  "plugins": [
+    {
+      "name": "voz",
+      "source": "./",
+      "description": "Claude Voice Assistant: local voice conversation and hands-free assistant for Claude Code desktop"
+    }
+  ]
+}

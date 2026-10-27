@@ -1,0 +1,45 @@
+{
+  "name": "voz",
+  "version": "0.1.1",
+  "description": "Claude Voice Assistant: talk to Claude Code by voice, fully local (Whisper MLX + local TTS). One session becomes a hands-free assistant over all your sessions; permissions can be approved by voice.",
+  "types": "./types/index.d.ts",
+  "license": "Unlicense",
+  "userConfig": {
+    "vozDir": {
+      "type": "string",
+      "title": "Pasta do daemon",
+      "description": "Pasta do daemon de voz. Vazio = a pasta daemon/ dentro do plugin (instalada automaticamente com uv na primeira vez)",
+      "default": ""
+    },
+    "port": {
+      "type": "number",
+      "title": "Porta",
+      "description": "Porta HTTP do daemon de voz",
+      "default": 8765
+    },
+    "autoStart": {
+      "type": "boolean",
+      "title": "Ligar ao arrancar",
+      "description": "Ligar a voz quando arranca a sessão designada como assistente (a última onde correu /voz)",
+      "default": true
+    },
+    "tts": {
+      "type": "string",
+      "title": "Voz (TTS)",
+      "description": "Backend de voz do daemon",
+      "default": "mlx",
+      "options": [
+        "mlx",
+        "say",
+        "piper"
+      ]
+    },
+    "summaryMinutes": {
+      "type": "number",
+      "title": "Resumo intercalar (min)",
+      "description": "Em modo de reunião, intervalo em minutos entre resumos intercalares pedidos ao Claude; 0 desliga",
+      "default": 15
+    }
+  },
+  "homepage": "https://github.com/hvieirapt/claude-voice-assistant"
+}
