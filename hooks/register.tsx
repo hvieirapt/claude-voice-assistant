@@ -117,6 +117,7 @@ const st = {
   permissionMode: '' as string, // modo de permissões da sessão, visto no último PreToolUse
   lastErr: '', // última linha de stderr do daemon, para explicar uma saída inesperada
   fatal: '', // erro fatal reportado pelo daemon (evento `fatal`)
+  restarts: 0, // rearranques automáticos seguidos (evita um ciclo se o daemon sair limpo sem parar)
   silencedTurn: undefined as string | undefined, // turno cuja leitura foi calada por palavra-chave
   meetingTimer: undefined as undefined | { cancel: () => void },
   meetingCount: 0,
@@ -285,6 +286,7 @@ async function restoreSettings($: EngineInterface) {
 async function handleEvent($: EngineInterface, ev: DaemonEvent) {
   switch (ev.type) {
     case 'ready': {
+      st.restarts = 0
       const settings = ev.settings ?? DEFAULT_SETTINGS
       await setStatus($, { state: 'listening', mic: ev.mic, output: ev.output ?? '', muted: ev.muted ?? false, ptt: false, tts: ev.tts, note: '', settings, voices: ev.voices ?? [] })
       await restoreSettings($)
@@ -391,7 +393,7 @@ async function handleEvent($: EngineInterface, ev: DaemonEvent) {
       break
     }
     case 'bye':
-      if (ev.reason === 'handover') {
+      if (ev.reason === 'handover' && !(await isOwner($))) {
         st.wanted = false // outra sessão ficou com a voz: aqui apaga-se sem erro
         await addRow($, 'note', 'a voz passou para outra sessão')
       }
@@ -510,7 +512,12 @@ async function pumpDaemon($: EngineInterface) {
     await setStatus($, { state: 'error', note: `daemon: ${String(err)}` })
   } finally {
     st.running = false
-    if (st.wanted) {
+    if (st.wanted && st.fatal === '' && st.lastErr === '' && st.restarts < 2 && (await isOwner($))) {
+      st.restarts++
+      // saída limpa pedida por nós (handover para esta mesma sessão, reload): arranca de novo
+      await setStatus($, { state: 'off', level: 0, saying: '', note: '' })
+      startDaemon($)
+    } else if (st.wanted) {
       // ninguém pediu para desligar: o daemon morreu; mantém a banda com o motivo em vez de a esconder
       const motivo = st.fatal || st.lastErr || 'terminou sem explicação'
       await setStatus($, { state: 'error', level: 0, saying: '', note: `o daemon de voz parou: ${motivo}. Usa /voice-assistant para voltar a ligar.` })
@@ -567,7 +574,10 @@ async function takeOver($: EngineInterface): Promise<boolean> {
 }
 
 function startDaemon($: EngineInterface) {
-  if (st.running) return
+  if (st.running) {
+    st.wanted = true // se estava a sair, o fim do pump volta a arrancar
+    return
+  }
   st.running = true
   st.wanted = true
   st.lastErr = ''
