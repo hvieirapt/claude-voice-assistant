@@ -26,7 +26,7 @@ a permission request, asked aloud and answered with a "yes" or a "no".
   plugin as a `PreToolUse` hook, no setup.
 - **Natural turn-taking**: speak over the voice to interrupt it; short acknowledgements do not interrupt work;
   "stop" and "skip" are understood in any language by a local classifier, not a word list.
-- **Meeting mode**: `/voz reuniao <title>` listens to the room, separates speakers by voice embedding, writes timed
+- **Meeting mode**: `/voice-assistant meeting <title>` listens to the room, separates speakers by voice embedding, writes timed
   minutes, asks Claude for interim summaries and a formal record at the end.
 - **A band above the prompt and a side pane**: state, microphone level, transcript bubbles, voice and mode
   selectors, settings (voice, speed, sensitivity, pause length, filler-word cleanup, barge-in, audio devices,
@@ -46,8 +46,9 @@ From a terminal session of Claude Code:
 /plugin install voz --marketplace hvieirapt/claude-voice-assistant
 ```
 
-Then open the session you want to talk to and run `/voz`: it becomes the assistant and starts with the voice on
-from then on. `/voz off` turns it off; `/voz` in another session moves the voice there.
+Then open the session you want to talk to and run `/voice-assistant`: it becomes the assistant and starts with the
+voice on from then on. `/voice-assistant off` turns it off; `/voice-assistant` in another session moves the voice
+there. Other arguments: `auto` or `manual` (record with the button), `meeting <title>[, N speakers]` and `end`.
 
 ## How it works
 

@@ -34,7 +34,7 @@ const LISTENING = {
 test('sem sessão designada a voz fica passiva: a banda não se desenha', async ($, on) => {
   mock.store(on, {})
   on('session.id', () => ({ value: 'sessao-a' }))
-  on('command.register', () => ({ value: { command: 'voz' } }))
+  on('command.register', () => ({ value: { command: 'voice-assistant' } }))
   on('ui.open', () => ({ value: { isPlaced: true } }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   // nada desenha por baixo do plugin: este hook faz de motor
@@ -52,7 +52,7 @@ test('sem sessão designada a voz fica passiva: a banda não se desenha', async 
 test('na sessão designada a voz arranca: a banda e o painel desenham-se', async ($, on) => {
   mock.store(on, { 'voz.assistant': 'sessao-voz' })
   on('session.id', () => ({ value: 'sessao-voz' }))
-  on('command.register', () => ({ value: { command: 'voz' } }))
+  on('command.register', () => ({ value: { command: 'voice-assistant' } }))
   on('ui.open', () => ({ value: { isPlaced: true } }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
 

@@ -20,7 +20,7 @@
     "autoStart": {
       "type": "boolean",
       "title": "Ligar ao arrancar",
-      "description": "Ligar a voz quando arranca a sessão designada como assistente (a última onde correu /voz)",
+      "description": "Ligar a voz quando arranca a sessão designada como assistente (a última onde correu /voice-assistant)",
       "default": true
     },
     "tts": {

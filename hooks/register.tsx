@@ -13,7 +13,7 @@ import type { MeetingEntry, Row, VozLanguage, VozSettings, VozStatus, VozVoice, 
 const PANE = 'voz'
 const MAX_ROWS = 40
 const STORE_KEY = 'voz.settings'
-const OWNER_KEY = 'voz.assistant' // id da sessão que é o assistente de voz (a última onde correu /voz)
+const OWNER_KEY = 'voz.assistant' // id da sessão que é o assistente de voz (a última onde correu /voice-assistant)
 
 // A sessão de voz é um assistente de mãos livres sobre as outras sessões, não a que faz o trabalho.
 const ASSISTENTE = `You are the user's hands-free voice assistant for the Claude Code desktop app. This session exists to talk: keep every turn short and never start long work here.
@@ -513,7 +513,7 @@ async function pumpDaemon($: EngineInterface) {
     if (st.wanted) {
       // ninguém pediu para desligar: o daemon morreu; mantém a banda com o motivo em vez de a esconder
       const motivo = st.fatal || st.lastErr || 'terminou sem explicação'
-      await setStatus($, { state: 'error', level: 0, saying: '', note: `o daemon de voz parou: ${motivo}. Usa /voz para voltar a ligar.` })
+      await setStatus($, { state: 'error', level: 0, saying: '', note: `o daemon de voz parou: ${motivo}. Usa /voice-assistant para voltar a ligar.` })
     } else {
       await setStatus($, { state: 'off', level: 0, saying: '', note: '' })
     }
@@ -674,12 +674,12 @@ export const register: Register = (on, options) => {
 
   on('session.start', async ($, e, next) => {
     await $.command.register({
-      name: 'voz',
-      description: 'Voz: conversa por voz, painel, modo de reunião com acta (/voz on|off|ptt|auto|reuniao <título>[, N oradores]|fim)',
-      argumentHint: 'on|off|ptt|auto|reuniao <título>[, N oradores]|fim',
+      name: 'voice-assistant',
+      description: 'Voice assistant: talk to this session by voice, hands-free over your other sessions, meeting minutes (/voice-assistant [off|auto|manual|meeting <title>[, N speakers]|end])',
+      argumentHint: 'off|auto|manual|meeting <title>[, N speakers]|end',
     })
     const started = await next(e)
-    // Só uma sessão tem o microfone e a voz: a designada com /voz (guardada entre sessões).
+    // Só uma sessão tem o microfone e a voz: a designada com /voice-assistant (guardada entre sessões).
     // As outras ficam passivas: não falam, não ouvem; só as permissões por voz passam por elas (hook do plugin).
     if (st.wanted && (await isOwner($))) {
       void $.ui.open({ id: PANE, title: 'Voz' })
@@ -688,40 +688,40 @@ export const register: Register = (on, options) => {
     return started
   })
 
-  on('command.run', { command: 'voz' }, async ($, e) => {
+  on('command.run', { command: 'voice-assistant' }, async ($, e) => {
     const arg = (e.args ?? '').trim().toLowerCase()
     if (arg === 'off') {
       await stopDaemon($)
       if (await isOwner($)) await $.store.delete(OWNER_KEY).catch(() => undefined)
-      return { text: 'Voz desligada.' }
+      return { text: 'Voice assistant off.' }
     }
-    if (arg === 'ptt' || arg === 'auto') {
-      await applySettings($, { mode: arg })
-      return { text: `Voz em modo ${arg}.` }
+    if (arg === 'auto' || arg === 'manual') {
+      await applySettings($, { mode: arg === 'manual' ? 'ptt' : 'auto' })
+      return { text: arg === 'manual' ? 'Manual mode: record with the button.' : 'Automatic mode: speech is detected.' }
     }
-    if (arg.startsWith('reuni')) {
-      // "/voz reuniao Título" ou "/voz reuniao Título, 3 oradores" (ou "3 pessoas")
+    if (arg.startsWith('meeting')) {
+      // "/voice-assistant meeting Title" or "/voice-assistant meeting Title, 3 speakers"
       let rest = (e.args ?? '').trim().replace(/^\S+\s*/, '')
       let speakers: number | undefined
-      const m = rest.match(/[,;]?\s*(\d+)\s*(oradores?|pessoas?|participantes?)\s*$/i)
+      const m = rest.match(/[,;]?\s*(\d+)\s*(speakers?|people|participants?|oradores?|pessoas?)\s*$/i)
       if (m) {
         speakers = Number(m[1])
         rest = rest.slice(0, m.index).trim()
       }
-      const title = rest || 'Reunião'
+      const title = rest || 'Meeting'
       await $.ui.open({ id: PANE, title: 'Voz', focus: true })
       const r = await cmd($, { type: 'meeting', on: true, title, speakers })
-      return { text: r ? `Modo de reunião ligado: "${title}"${speakers ? `, ${speakers} oradores` : ''}. Diz "/voz fim" para terminar e gerar a acta.` : 'A voz não está ligada.' }
+      return { text: r ? `Meeting mode on: "${title}"${speakers ? `, ${speakers} speakers` : ''}. Run "/voice-assistant end" to finish and get the minutes.` : 'The voice assistant is not running.' }
     }
-    if (arg === 'fim' || arg === 'terminar') {
+    if (arg === 'end') {
       const path = await endMeeting($)
-      return { text: path ? `Reunião terminada; intervenções em ${path}. A acta formal vem a seguir.` : 'Não havia reunião a decorrer.' }
+      return { text: path ? `Meeting ended; the timed transcript is in ${path}. The formal minutes follow.` : 'No meeting was running.' }
     }
     await $.ui.open({ id: PANE, title: 'Voz', focus: true })
     const was = st.running
     const tomou = await takeOver($)
     startDaemon($)
-    return { text: was ? 'Painel da voz aberto.' : tomou ? 'Esta sessão passa a ser o assistente de voz; a voz está a arrancar.' : 'Voz a arrancar.' }
+    return { text: was ? 'Voice pane opened.' : tomou ? 'This session is now the voice assistant; the voice is starting.' : 'Voice assistant starting.' }
   })
 
   on('prompt.compose', async ($, e, next) => {
@@ -954,7 +954,7 @@ export const register: Register = (on, options) => {
     return (
       <Box flexDirection="column" gap={1}>
         {s.showSettings && !Select ? (
-          <Text dimColor>Esta superfície não desenha listas de escolha; usa /voz ptt ou /voz auto.</Text>
+          <Text dimColor>Esta superfície não desenha listas de escolha; usa /voice-assistant manual ou /voice-assistant auto.</Text>
         ) : null}
         {s.showSettings && Select ? (
           <Box flexDirection="column" gap={1} borderStyle="round" borderDimColor paddingX={1}>
