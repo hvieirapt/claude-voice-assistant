@@ -112,7 +112,6 @@ const st = {
   mergeBuf: '',
   spokenInTurn: 0,
   liveRowId: undefined as number | undefined,
-  permission: undefined as undefined | { resolve: (text: string) => void },
   summaryMinutes: 15,
   permissionMode: '' as string, // modo de permissões da sessão, visto no último PreToolUse
   lastErr: '', // última linha de stderr do daemon, para explicar uma saída inesperada
@@ -335,14 +334,6 @@ async function handleEvent($: EngineInterface, ev: DaemonEvent) {
       const text = ev.text.trim()
       await setStatus($, { note: '' })
       if (!text) return
-      if (st.permission) {
-        // resposta por voz a um pedido de permissão do Claude
-        const pending = st.permission
-        st.permission = undefined
-        await addRow($, 'me', text)
-        pending.resolve(text)
-        return
-      }
       const clean = text.replace(/[.!?,\s]+$/g, '').toLowerCase()
       if (st.activeTurn !== undefined && BACKCHANNEL.has(clean)) {
         await addRow($, 'note', `"${text}" (confirmação; o Claude continua)`)
@@ -597,61 +588,6 @@ function startDaemon($: EngineInterface) {
 async function stopDaemon($: EngineInterface) {
   st.wanted = false
   await cmd($, { type: 'quit' })
-}
-
-// ---------- permissões por voz ----------
-const SIM = ['sim', 'pode', 'podes', 'permito', 'autorizo', 'força', 'avança', 'ok', 'okay', 'claro', 'aprovo', 'deixa', 'yes', 'go', 'vai']
-const NAO = ['não', 'nao', 'nega', 'recusa', 'recuso', 'cancela', 'pára', 'para', 'nunca', 'no', 'nope', 'deny']
-
-function descreverTool(tool: string, input: unknown): string {
-  const i = (input && typeof input === 'object' ? (input as Record<string, unknown>) : {}) as Record<string, unknown>
-  const nome = (v: unknown) => String(v ?? '').split('/').pop() ?? ''
-  // Dito em voz alta: só o tipo de acção, nunca o conteúdo (o comando inteiro fica escrito no painel).
-  if (tool === 'Bash') {
-    const c = String(i['command'] ?? '').trim()
-    const primeira = (c.match(/^[\w./-]+/) ?? [''])[0]
-    const verbo = c.includes('sudo') ? 'um comando com privilégios de administrador' : primeira ? `um comando de terminal, ${primeira}` : 'um comando de terminal'
-    return `correr ${verbo}`
-  }
-  if (tool === 'Edit' || tool === 'Write' || tool === 'MultiEdit' || tool === 'NotebookEdit') return `alterar o ficheiro ${nome(i['file_path'])}`
-  if (tool === 'Read') return `ler o ficheiro ${nome(i['file_path'])}`
-  if (tool === 'WebFetch') return 'consultar uma página web'
-  if (tool === 'WebSearch') return 'pesquisar na web'
-  if (tool === 'Agent' || tool === 'Task') return `lançar um subagente: ${String(i['description'] ?? '')}`
-  return `usar a ferramenta ${tool}`
-}
-
-// Só uma resposta curta (até 6 palavras) que começa por sim/não conta como decisão;
-// "não é interessante fazer X" é uma mensagem, não uma recusa.
-function decisaoPorVoz(text: string): 'allow' | 'deny' | undefined {
-  const t = text.toLowerCase().replace(/[.!?,;:]/g, ' ')
-  const words = t.split(/\s+/).filter(Boolean)
-  if (words.length === 0 || words.length > 6) return undefined
-  const first = words[0] ?? ''
-  const second = words[1] ?? ''
-  const head = [first, second]
-  if (head.some(w => NAO.includes(w))) return 'deny'
-  if (head.some(w => SIM.includes(w))) return 'allow'
-  return undefined
-}
-
-// Espera a próxima frase ditada (ou desiste ao fim de `ms`, pelo relógio do motor).
-function esperarResposta($: EngineInterface, ms: number): Promise<string | undefined> {
-  return new Promise(resolve => {
-    let settled = false
-    const done = (text: string) => {
-      if (settled) return
-      settled = true
-      resolve(text)
-    }
-    st.permission = { resolve: done }
-    $.clock.after(ms, () => {
-      if (settled) return
-      settled = true
-      if (st.permission?.resolve === done) st.permission = undefined
-      resolve(undefined)
-    })
-  })
 }
 
 // ---------- painel ----------
