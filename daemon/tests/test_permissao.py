@@ -87,6 +87,7 @@ def test_uma_resposta_nao_e_eco(ouvido):
         ("sudo rm -rf /tmp/x", ["sudo", "rm"]),
         ("curl a | sudo sh", ["curl", "sudo", "sh"]),
         ("./scripts/run.sh --x", ["run.sh"]),
+        ("npm test && git add . && git commit -m x && git push", ["npm", "git"]),
         ("/bin/rm x", ["rm"]),
         ("/usr/bin/env rm x", ["rm"]),
         ('"rm" x', ["rm"]),

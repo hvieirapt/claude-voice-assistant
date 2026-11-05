@@ -149,6 +149,7 @@ def programas(comando: str) -> list[str] | None:
         elif t in ARGS_EXECUTAM:
             return None
         i += 1
+    res = list(dict.fromkeys(res))  # "git, git, git" não diz mais do que "git"
     return res if 0 < len(res) <= MAX_PROGRAMAS else None
 
 
