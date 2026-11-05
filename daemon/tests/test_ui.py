@@ -96,6 +96,13 @@ def test_pedidos_recusados_nao_chegam_ao_comando(cabecalhos, esperado):
     assert recebidos == []
 
 
+@pytest.mark.parametrize("tamanho", ["abc", "-1", str(1 << 21)])
+def test_tamanho_invalido_e_recusado(tamanho):
+    estado, _, recebidos = correr("POST", "/cmd", {**JSON, "Content-Length": tamanho})
+    assert estado == 400
+    assert recebidos == []
+
+
 def test_recusa_fica_registada(caplog):
     with caplog.at_level(logging.WARNING, logger="voz.ui"):
         correr("POST", "/cmd", {**JSON, "Origin": "https://evil.example"}, CMD)

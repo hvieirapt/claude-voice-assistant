@@ -14,6 +14,7 @@ from typing import Any, Awaitable, Callable
 
 log = logging.getLogger("voz.ui")
 INDEX = Path(__file__).with_name("static") / "index.html"
+MAX_CORPO = 1 << 20
 ESTADOS = {200: "OK", 400: "Bad Request", 403: "Forbidden", 404: "Not Found", 415: "Unsupported Media Type"}
 
 
@@ -75,10 +76,14 @@ class UI:
             log.warning("pedido recusado (%d): %s %s host=%r origin=%r content-type=%r", recusa, method, path, headers.get("host"), headers.get("origin"), headers.get("content-type"))
             self._respond(writer, recusa, "text/plain", b"recusado"); await writer.drain(); writer.close()
             return
-        body = b""
-        n = int(headers.get("content-length", "0") or 0)
-        if n:
-            body = await reader.readexactly(n)
+        try:
+            n = int(headers.get("content-length", "0") or 0)
+            if not 0 <= n <= MAX_CORPO:
+                raise ValueError(n)
+            body = await reader.readexactly(n) if n else b""
+        except (ValueError, asyncio.IncompleteReadError):
+            self._respond(writer, 400, "text/plain", b"pedido invalido"); await writer.drain(); writer.close()
+            return
 
         if method == "GET" and path == "/":
             self._respond(writer, 200, "text/html; charset=utf-8", INDEX.read_bytes()); await writer.drain(); writer.close()
