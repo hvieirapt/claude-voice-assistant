@@ -25,8 +25,10 @@ MODELO = Path.home() / ".voz" / "models" / "3dspeaker_speech_eres2net_base_sv_zh
 ACTAS = Path.home() / ".voz" / "reunioes"
 
 # "eu sou o João", "sou a Maria", "chamo-me Rui", "este é o Pedro", "aqui é a Ana"
+# Só a apresentação ignora maiúsculas: o nome tem de começar por maiúscula, senão "eu sou contra isso" daria um nome.
 RE_NOME = re.compile(
-    r"(?i)\b(?:eu sou|sou|chamo-me|o meu nome é|aqui (?:é|fala)|este é|esta é|fala)\s+(?:o|a)?\s*([A-ZÁÉÍÓÚÂÊÔÃÕÇ][\wÁÉÍÓÚÂÊÔÃÕÇáéíóúâêôãõç-]{1,30}(?:\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ][\wáéíóúâêôãõç-]{1,30})?)\b"
+    r"\b(?i:eu sou|sou|chamo-me|o meu nome é|aqui (?:é|fala)|este é|esta é|fala)\s+(?i:[oa]\s+)?"
+    r"([A-ZÁÉÍÓÚÂÊÔÃÕÇ][\wÁÉÍÓÚÂÊÔÃÕÇáéíóúâêôãõç-]{1,30}(?:\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ][\wáéíóúâêôãõç-]{1,30})?)\b"
 )
 
 
