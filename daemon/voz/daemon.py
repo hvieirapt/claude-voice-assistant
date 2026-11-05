@@ -46,6 +46,7 @@ SAUDACAO = {
     "it": "Ciao, ora parlo con questa voce.", "nl": "Hallo, dit is nu mijn stem.", "pl": "Cześć, teraz mówię tym głosem.",
 }
 ACK = "/System/Library/Sounds/Tink.aiff"
+MIN_TEMPO_RESPOSTA_S = 5  # abaixo disto não dá para ouvir a pergunta e responder
 
 
 class Daemon:
@@ -63,7 +64,11 @@ class Daemon:
         self._ditas: list[str] = []  # últimas frases ditas pela voz (filtro de eco)
         self._muted = False
         self._expect_answer = False
-        self._pergunta_dita = ""     # pedido de permissão em curso, para reconhecer o eco
+        self._pergunta_dita = ""     # o que a voz disse durante o pedido de permissão em curso, para reconhecer o eco
+        self._resposta_fut: asyncio.Future | None = None
+        self._pedido_lock = asyncio.Lock()  # um pedido de cada vez: um "sim" tem de ser para o pedido que ouviste
+        self._pedido_em = 0.0
+        self._inicio_gravacao: float | None = None
         from .intencao import Intencao
 
         kw = cfg.get("keywords", {})
@@ -103,6 +108,12 @@ class Daemon:
         texto = aplicar_substituicoes(texto)
         texto = await self._limpar(texto)
         self.out("utterance", text=texto)
+
+    def _dizer(self, frase: str) -> None:
+        """Diz uma frase. Durante um pedido de permissão, o que a voz disser não pode contar como resposta."""
+        if self._resposta_fut is not None:
+            self._pergunta_dita += " " + frase
+        self.fala.dizer(frase)
 
     def out(self, type_: str, **data) -> None:
         _EVENTS.write(json.dumps({"type": type_, **data}, ensure_ascii=False) + "\n")
@@ -144,6 +155,7 @@ class Daemon:
             if kind == "level":
                 self.out("level", v=round(payload, 3))
             elif kind == "speech_start":
+                self._inicio_gravacao = time.monotonic()
                 self._hold = True
                 if self._gap_task:  # continuaste a falar: a frase anterior ainda não vai
                     self._gap_task.cancel(); self._gap_task = None
@@ -166,22 +178,23 @@ class Daemon:
                     self._interrompeu_voz = False
                     self.fala.resume()
                 for frase in self._pending:
-                    self.fala.dizer(frase)
+                    self._dizer(frase)
                 self._pending.clear()
                 self._set_state("speaking" if (not self.fala.queue.empty() or self.fala.paused) else "listening")
             elif kind == "utterance" and self.reuniao is not None:
                 await self._reuniao_entrada(payload)
             elif kind == "utterance" and self._expect_answer:
                 texto = payload["text"] if isinstance(payload, dict) else str(payload)
-                if e_eco_da_pergunta(texto, self._pergunta_dita):
-                    # a voz a ouvir-se a si própria: não gasta a resposta e continua à espera
+                antes_da_pergunta = self._inicio_gravacao is not None and self._inicio_gravacao < self._pedido_em
+                if antes_da_pergunta or e_eco_da_pergunta(texto, self._pergunta_dita):
+                    # a voz a ouvir-se a si própria, ou uma frase que já vinha de trás: não gasta a resposta
                     self._hold = False
-                    self.out("discarded", reason=f"eco da pergunta: {texto[:60]}")
+                    self.out("discarded", reason=f"{'começou antes da pergunta' if antes_da_pergunta else 'eco da pergunta'}: {texto[:60]}")
                     if self._interrompeu_voz:
                         self._interrompeu_voz = False
                         self.fala.resume()
                     for frase in self._pending:
-                        self.fala.dizer(frase)
+                        self._dizer(frase)
                     self._pending.clear()
                     self._set_state("speaking" if (not self.fala.queue.empty() or self.fala.paused) else "listening")
                     continue
@@ -323,13 +336,29 @@ class Daemon:
     # ---------- permissões por voz (hook PreToolUse do plugin) ----------
     async def _perguntar_permissao(self, tool: str, inp: dict, timeout: float, project: str = "") -> dict:
         """Diz a pergunta, espera a próxima frase (modo resposta) e classifica sim/não. Devolve {decision, text}."""
-        if self.reuniao is not None or self._muted:
-            return {"decision": "none", "reason": "em reunião ou microfone em pausa"}
         pergunta = descrever_pedido(tool, inp, self.cfg["tts"].get("lang", "pt_PT"), project)
         if pergunta is None:
             self.out("note", text="comando difícil de resumir em voz alta; o diálogo fica à tua espera")
             return {"decision": "none", "reason": "comando por resumir"}
+        # Pedidos de outras sessões esperam pela sua vez, dentro do tempo de que este dispõe.
+        inicio = time.monotonic()
+        try:
+            await asyncio.wait_for(self._pedido_lock.acquire(), timeout=timeout)
+        except asyncio.TimeoutError:
+            return {"decision": "none", "reason": "outro pedido em curso"}
+        try:
+            restante = timeout - (time.monotonic() - inicio)
+            if restante < MIN_TEMPO_RESPOSTA_S:
+                return {"decision": "none", "reason": "outro pedido em curso"}
+            return await self._fazer_pergunta(pergunta, tool, inp, restante)
+        finally:
+            self._pedido_lock.release()
+
+    async def _fazer_pergunta(self, pergunta: str, tool: str, inp: dict, timeout: float) -> dict:
+        if self.reuniao is not None or self._muted:
+            return {"decision": "none", "reason": "em reunião ou microfone em pausa"}
         self.out("note", text=f"? {pergunta}" + (f"\n  {str(inp.get('command',''))[:300]}" if tool == "Bash" else ""))
+        self._pedido_em = time.monotonic()
         await self.fala.stop()
         self._resposta_fut = self.loop.create_future()
         self._pergunta_dita = pergunta
@@ -377,7 +406,7 @@ class Daemon:
                 if self._hold:
                     self._pending.append(s)
                 else:
-                    self.fala.dizer(s)
+                    self._dizer(s)
         elif t == "stop":
             self._pending.clear()
             await self.fala.stop()
@@ -602,14 +631,14 @@ class Daemon:
             self.cfg["tts"]["speed"] = max(0.6, min(1.6, float(cmd["speed"]))); mudou.append("velocidade")
             if "voice" not in cmd and not quiet:
                 await self.fala.stop()
-                self.fala.dizer("Agora falo a esta velocidade.")
+                self._dizer("Agora falo a esta velocidade.")
         if "voice" in cmd:
             self.out("note", text="a mudar a voz…")
             try:
                 desc = await self.fala.mudar_voz(str(cmd["voice"]))
                 self.out("note", text=f"voz: {desc}"); mudou.append("voz")
                 if not quiet:
-                    self.fala.dizer(SAUDACAO.get(self.cfg["tts"].get("lang", "pt_PT"), SAUDACAO["en"]))
+                    self._dizer(SAUDACAO.get(self.cfg["tts"].get("lang", "pt_PT"), SAUDACAO["en"]))
             except Exception as e:  # noqa: BLE001
                 self.out("note", text=f"não consegui mudar a voz: {e}")
         defs = self._definicoes()
