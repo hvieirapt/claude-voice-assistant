@@ -31,7 +31,7 @@ from .config import load_config
 from .fala import Fala
 from .falante import limpar_markdown
 from .ouvido import Ouvido
-from .permissao import classificar_resposta, e_eco_da_pergunta
+from .permissao import classificar_resposta, descrever_pedido, e_eco_da_pergunta
 from .ui import UI
 
 # O mod lê eventos JSON no stdout do processo; tudo o resto (prints de bibliotecas) vai para stderr.
@@ -321,46 +321,14 @@ class Daemon:
         return {"ok": True, "on": self.reuniao is not None}
 
     # ---------- permissões por voz (hook PreToolUse do plugin) ----------
-    def _descrever(self, tool: str, inp: dict, project: str = "") -> str:
-        lang = self.cfg["tts"].get("lang", "pt_PT")
-        fam = lang.split("_")[0]
-        nome = lambda v: str(v or "").split("/")[-1]
-        cmdline = str(inp.get("command", "")).strip() if tool == "Bash" else ""
-        primeira = (re.match(r"^[\w./-]+", cmdline) or re.match("", ""))
-        primeira = primeira.group(0) if primeira else ""
-        T = {
-            "pt": {"bash": "correr um comando de terminal", "sudo": "correr um comando com privilégios de administrador", "edit": "alterar o ficheiro", "read": "ler o ficheiro", "web": "consultar uma página web", "search": "pesquisar na web", "tool": "usar a ferramenta", "q": "O Claude quer {a}. Permites?"},
-            "en": {"bash": "run a terminal command", "sudo": "run a command with administrator privileges", "edit": "change the file", "read": "read the file", "web": "fetch a web page", "search": "search the web", "tool": "use the tool", "q": "Claude wants to {a}. Is that fine?"},
-            "es": {"bash": "ejecutar un comando de terminal", "sudo": "ejecutar un comando con privilegios de administrador", "edit": "modificar el archivo", "read": "leer el archivo", "web": "consultar una página web", "search": "buscar en la web", "tool": "usar la herramienta", "q": "Claude quiere {a}. ¿Permites?"},
-            "fr": {"bash": "exécuter une commande du terminal", "sudo": "exécuter une commande avec les droits administrateur", "edit": "modifier le fichier", "read": "lire le fichier", "web": "consulter une page web", "search": "chercher sur le web", "tool": "utiliser l'outil", "q": "Claude veut {a}. Tu permets ?"},
-            "de": {"bash": "einen Terminal-Befehl ausführen", "sudo": "einen Befehl mit Administratorrechten ausführen", "edit": "die Datei ändern", "read": "die Datei lesen", "web": "eine Webseite abrufen", "search": "im Web suchen", "tool": "das Werkzeug benutzen", "q": "Claude möchte {a}. Erlaubst du?"},
-            "it": {"bash": "eseguire un comando del terminale", "sudo": "eseguire un comando con privilegi di amministratore", "edit": "modificare il file", "read": "leggere il file", "web": "consultare una pagina web", "search": "cercare sul web", "tool": "usare lo strumento", "q": "Claude vuole {a}. Permetti?"},
-        }
-        t = T.get(fam, T["en"])
-        if tool == "Bash":
-            a = t["sudo"] if "sudo" in cmdline else (f"{t['bash']}, {primeira}" if primeira else t["bash"])
-        elif tool in ("Edit", "Write", "MultiEdit", "NotebookEdit"):
-            a = f"{t['edit']} {nome(inp.get('file_path'))}"
-        elif tool == "Read":
-            a = f"{t['read']} {nome(inp.get('file_path'))}"
-        elif tool == "WebFetch":
-            a = t["web"]
-        elif tool == "WebSearch":
-            a = t["search"]
-        else:
-            a = f"{t['tool']} {tool}"
-        q = t["q"].format(a=a)
-        if project:
-            # pedido vindo de outra sessão: diz de que projecto é
-            P = {"pt": "No projecto {p}: ", "en": "In project {p}: ", "es": "En el proyecto {p}: ", "fr": "Dans le projet {p} : ", "de": "Im Projekt {p}: ", "it": "Nel progetto {p}: "}
-            q = P.get(fam, P["en"]).format(p=project) + q
-        return q
-
     async def _perguntar_permissao(self, tool: str, inp: dict, timeout: float, project: str = "") -> dict:
         """Diz a pergunta, espera a próxima frase (modo resposta) e classifica sim/não. Devolve {decision, text}."""
         if self.reuniao is not None or self._muted:
             return {"decision": "none", "reason": "em reunião ou microfone em pausa"}
-        pergunta = self._descrever(tool, inp, project)
+        pergunta = descrever_pedido(tool, inp, self.cfg["tts"].get("lang", "pt_PT"), project)
+        if pergunta is None:
+            self.out("note", text="comando difícil de resumir em voz alta; o diálogo fica à tua espera")
+            return {"decision": "none", "reason": "comando por resumir"}
         self.out("note", text=f"? {pergunta}" + (f"\n  {str(inp.get('command',''))[:300]}" if tool == "Bash" else ""))
         await self.fala.stop()
         self._resposta_fut = self.loop.create_future()
