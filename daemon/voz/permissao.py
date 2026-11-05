@@ -28,7 +28,7 @@ NEGACAO = frozenset({
 
 AFIRMACAO = frozenset({
     # pt
-    "sim", "pode", "podes", "permito", "autorizo", "aprovo", "confirmo", "força", "forca", "avança", "avanca", "avançar", "avancar",
+    "sim", "pode", "podes", "autorizo", "aprovo", "confirmo", "força", "forca", "avança", "avanca", "avançar", "avancar",
     "claro", "certo", "ok", "okay", "vai",
     # en
     "yes", "yeah", "yep", "sure", "allow", "approve", "approved", "go",
@@ -39,20 +39,30 @@ AFIRMACAO = frozenset({
     # de
     "ja", "klar", "genau", "erlaube",
     # it
-    "sì", "permetto", "autorizzo", "va",
+    "sì", "autorizzo", "va",
 })
+
+# Fora de propósito: "permito" e "permetto", quase iguais às perguntas "Permites?" e "Permetti?": mal transcritas,
+# um eco aprovaria. "deixa", porque "deixa estar" quer dizer o contrário.
 
 # Só acompanham uma afirmação: "sim, por favor". Sozinhas não aprovam nada.
 COMPLEMENTO = frozenset({
-    "por", "favor", "ser", "que", "lá", "está", "bem", "bom", "fazer", "isso",
+    "por", "favor", "ser", "lá", "está", "bem", "bom", "fazer", "isso",
     "please", "ahead", "it", "do", "thing",
-    "s'il", "te", "plaît", "vous",
     "bitte", "gerne",
     "bene",
 })
+COMPLEMENTOS_EM_FRASE = ("s'il te plaît", "s'il vous plaît")
 
 # Frases inteiras que aprovam sem ter uma afirmação sozinha.
-FRASES_AFIRMATIVAS = frozenset({"está bem", "tá bom", "tudo bem", "faz isso", "do it"})
+FRASES_AFIRMATIVAS = frozenset({"está bem", "tá bom", "tudo bem", "faz isso", "claro que sim", "do it"})
+
+# Têm uma palavra de negação, mas não são uma recusa. Uma recusa é final; estas ficam para o diálogo.
+NAO_E_RECUSA = frozenset({
+    "não sei", "nao sei", "não tenho a certeza", "porque não", "por que não", "para a frente", "no problem", "no worries", "why not",
+    "not sure", "i don't know", "don't know", "dont know", "no sé", "pas de problème", "je ne sais pas", "kein problem", "warum nicht",
+    "ich weiß nicht", "weiß nicht", "perché no", "non lo so",
+})
 
 
 def _palavras(texto: str) -> list[str]:
@@ -65,12 +75,18 @@ def classificar_resposta(texto: str) -> str:
     palavras = _palavras(texto)
     if not palavras or len(palavras) > MAX_PALAVRAS:
         return "none"
+    frase = " ".join(palavras)
+    if frase in NAO_E_RECUSA:
+        return "none"
     if any(p in NEGACAO or p.endswith("n't") for p in palavras):
         return "deny"
-    if texto.rstrip(" \"'»”").endswith(("?", "？")):
-        return "none"  # uma pergunta não é um sim, e pode ser o eco da nossa própria pergunta
-    if " ".join(palavras) in FRASES_AFIRMATIVAS:
+    if re.search(r"[?？¿…]|\.\.", texto):
+        return "none"  # uma pergunta ou uma hesitação não são um sim, e a pergunta pode ser o nosso próprio eco
+    if frase in FRASES_AFIRMATIVAS:
         return "allow"
+    for complemento in COMPLEMENTOS_EM_FRASE:
+        frase = frase.replace(complemento, "")
+    palavras = frase.split()
     tem_afirmacao = any(p in AFIRMACAO for p in palavras)
     so_conhecidas = all(p in AFIRMACAO or p in COMPLEMENTO for p in palavras)
     return "allow" if tem_afirmacao and so_conhecidas else "none"

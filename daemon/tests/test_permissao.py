@@ -26,7 +26,7 @@ def test_aprova(frase):
 @pytest.mark.parametrize(
     "frase",
     [
-        "não", "Não.", "nao", "não permito", "agora não", "nunca", "pára",
+        "não", "Não.", "nao", "não permito", "não permitas", "agora não", "nunca", "pára",
         "no", "nope", "never", "deny",
         "don't allow", "Don't allow.", "don’t allow", "do not allow", "not allowed", "never allow", "don't go", "won't allow",
         "not ok", "don't permit",
@@ -42,8 +42,14 @@ def test_recusa(frase):
     "frase",
     [
         # hesitações e frases que não são uma aprovação
-        "deixa estar", "deixa lá", "deixa", "pode esperar", "vai com calma", "go away", "go back", "ok espera", "espera", "acho que sim",
-        "assim", "look", "bem", "por favor", "que",
+        "deixa estar", "deixa lá", "deixa", "pode esperar", "vai com calma", "go away", "go back", "ok espera", "espera",
+        "assim", "look", "bem", "por favor", "que", "acho que sim", "pode ser que sim", "vai te", "si vous", "si te",
+        "fine", "permito", "permetto",
+        # reticências e perguntas são hesitação
+        "Sim...", "Ok...", "Sim…", "Sim?!", "Sim? Ok.", "Sim?\n",
+        # têm uma negação, mas não são uma recusa
+        "No problem", "No worries", "Why not", "Pas de problème", "Kein Problem", "Warum nicht", "Perché no", "Para a frente",
+        "Não sei", "I don't know", "Not sure",
         # o eco da nossa própria pergunta
         "Permites?", "Permites", "¿Permites?", "Allow?", "Erlaubst du?", "Tu permets ?", "Permetti?", "sim?",
         # frases longas são mensagens, mesmo com um sim ou um não

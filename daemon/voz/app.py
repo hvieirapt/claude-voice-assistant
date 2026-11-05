@@ -25,6 +25,7 @@ from .config import load_config
 from .fala import Fala
 from .falante import Falante, frases, limpar_markdown
 from .ouvido import Ouvido
+from .permissao import e_eco_da_pergunta
 from .ui import UI
 
 log = logging.getLogger("voz")
@@ -59,6 +60,7 @@ class App:
         self.cwd = Path(args.cwd).resolve()
         self._turn: asyncio.Task | None = None
         self._pergunta: asyncio.Future | None = None
+        self._pergunta_dita = ""
         self._hold = False
         self._pending: list[str] = []
         self._state = "idle"
@@ -167,6 +169,9 @@ class App:
     async def _on_user_text(self, texto: str) -> None:
         _say(f"\n› {texto}")
         if self._pergunta and not self._pergunta.done():
+            if e_eco_da_pergunta(texto, self._pergunta_dita):
+                self._note(f"eco da pergunta: {texto[:60]}")
+                return
             self.ui.emit("user", text=texto)
             self._pergunta.set_result(texto)  # resposta a um pedido de permissão
             return
@@ -261,12 +266,14 @@ class App:
         await self.fala.stop()
         self.fala.dizer(pergunta)
         self._pergunta = self.loop.create_future()
+        self._pergunta_dita = pergunta
         try:
             return await asyncio.wait_for(self._pergunta, timeout=120)
         except asyncio.TimeoutError:
             return "não"
         finally:
             self._pergunta = None
+            self._pergunta_dita = ""
 
     async def _ack(self) -> None:
         p = await asyncio.create_subprocess_exec("afplay", "-v", "0.4", ACK, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
