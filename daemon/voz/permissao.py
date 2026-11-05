@@ -73,3 +73,8 @@ def classificar_resposta(texto: str) -> str:
     tem_afirmacao = any(p in AFIRMACAO for p in palavras)
     so_conhecidas = all(p in AFIRMACAO or p in COMPLEMENTO for p in palavras)
     return "allow" if tem_afirmacao and so_conhecidas else "none"
+
+
+def e_eco_da_pergunta(texto: str, pergunta: str) -> bool:
+    """Verdadeiro se tudo o que foi ouvido faz parte da pergunta dita: é a voz a ouvir-se a si própria."""
+    return set(_palavras(texto)) <= set(_palavras(pergunta))

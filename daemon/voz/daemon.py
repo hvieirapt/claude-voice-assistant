@@ -31,7 +31,7 @@ from .config import load_config
 from .fala import Fala
 from .falante import limpar_markdown
 from .ouvido import Ouvido
-from .permissao import classificar_resposta
+from .permissao import classificar_resposta, e_eco_da_pergunta
 from .ui import UI
 
 # O mod lê eventos JSON no stdout do processo; tudo o resto (prints de bibliotecas) vai para stderr.
@@ -63,6 +63,7 @@ class Daemon:
         self._ditas: list[str] = []  # últimas frases ditas pela voz (filtro de eco)
         self._muted = False
         self._expect_answer = False
+        self._pergunta_dita = ""     # pedido de permissão em curso, para reconhecer o eco
         from .intencao import Intencao
 
         kw = cfg.get("keywords", {})
@@ -172,6 +173,18 @@ class Daemon:
                 await self._reuniao_entrada(payload)
             elif kind == "utterance" and self._expect_answer:
                 texto = payload["text"] if isinstance(payload, dict) else str(payload)
+                if e_eco_da_pergunta(texto, self._pergunta_dita):
+                    # a voz a ouvir-se a si própria: não gasta a resposta e continua à espera
+                    self._hold = False
+                    self.out("discarded", reason=f"eco da pergunta: {texto[:60]}")
+                    if self._interrompeu_voz:
+                        self._interrompeu_voz = False
+                        self.fala.resume()
+                    for frase in self._pending:
+                        self.fala.dizer(frase)
+                    self._pending.clear()
+                    self._set_state("speaking" if (not self.fala.queue.empty() or self.fala.paused) else "listening")
+                    continue
                 self._expect_answer = False
                 self._hold = False; self._interrompeu_voz = False; self._pending.clear()
                 if self._gap_task:
@@ -317,7 +330,7 @@ class Daemon:
         primeira = primeira.group(0) if primeira else ""
         T = {
             "pt": {"bash": "correr um comando de terminal", "sudo": "correr um comando com privilégios de administrador", "edit": "alterar o ficheiro", "read": "ler o ficheiro", "web": "consultar uma página web", "search": "pesquisar na web", "tool": "usar a ferramenta", "q": "O Claude quer {a}. Permites?"},
-            "en": {"bash": "run a terminal command", "sudo": "run a command with administrator privileges", "edit": "change the file", "read": "read the file", "web": "fetch a web page", "search": "search the web", "tool": "use the tool", "q": "Claude wants to {a}. Allow?"},
+            "en": {"bash": "run a terminal command", "sudo": "run a command with administrator privileges", "edit": "change the file", "read": "read the file", "web": "fetch a web page", "search": "search the web", "tool": "use the tool", "q": "Claude wants to {a}. Is that fine?"},
             "es": {"bash": "ejecutar un comando de terminal", "sudo": "ejecutar un comando con privilegios de administrador", "edit": "modificar el archivo", "read": "leer el archivo", "web": "consultar una página web", "search": "buscar en la web", "tool": "usar la herramienta", "q": "Claude quiere {a}. ¿Permites?"},
             "fr": {"bash": "exécuter une commande du terminal", "sudo": "exécuter une commande avec les droits administrateur", "edit": "modifier le fichier", "read": "lire le fichier", "web": "consulter une page web", "search": "chercher sur le web", "tool": "utiliser l'outil", "q": "Claude veut {a}. Tu permets ?"},
             "de": {"bash": "einen Terminal-Befehl ausführen", "sudo": "einen Befehl mit Administratorrechten ausführen", "edit": "die Datei ändern", "read": "die Datei lesen", "web": "eine Webseite abrufen", "search": "im Web suchen", "tool": "das Werkzeug benutzen", "q": "Claude möchte {a}. Erlaubst du?"},
@@ -351,6 +364,7 @@ class Daemon:
         self.out("note", text=f"? {pergunta}" + (f"\n  {str(inp.get('command',''))[:300]}" if tool == "Bash" else ""))
         await self.fala.stop()
         self._resposta_fut = self.loop.create_future()
+        self._pergunta_dita = pergunta
         self._expect_answer = True
         if self._gap_task:
             self._gap_task.cancel(); self._gap_task = None
@@ -365,6 +379,7 @@ class Daemon:
             return {"decision": "none", "reason": "sem resposta"}
         finally:
             self._resposta_fut = None
+            self._pergunta_dita = ""
         d = classificar_resposta(texto)
         self.out("note", text={"allow": "permitido por voz", "deny": "recusado por voz"}.get(d, "não era uma resposta ao pedido; o diálogo fica à tua espera"))
         return {"decision": d, "text": texto}

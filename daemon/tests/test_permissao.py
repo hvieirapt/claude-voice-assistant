@@ -2,7 +2,9 @@
 
 import pytest
 
-from voz.permissao import classificar_resposta
+from voz.permissao import classificar_resposta, e_eco_da_pergunta
+
+PERGUNTA = "O Claude quer correr um comando de terminal, ls. Permites?"
 
 
 @pytest.mark.parametrize(
@@ -52,3 +54,16 @@ def test_recusa(frase):
 )
 def test_vai_para_o_dialogo(frase):
     assert classificar_resposta(frase) == "none"
+
+
+@pytest.mark.parametrize(
+    "ouvido",
+    ["Permites?", "permites", "O Claude quer correr um comando de terminal, ls.", "comando de terminal", "", "..."],
+)
+def test_o_que_faz_parte_da_pergunta_e_eco(ouvido):
+    assert e_eco_da_pergunta(ouvido, PERGUNTA)
+
+
+@pytest.mark.parametrize("ouvido", ["sim", "ok", "no", "não", "permito", "sim, permites", "pode"])
+def test_uma_resposta_nao_e_eco(ouvido):
+    assert not e_eco_da_pergunta(ouvido, PERGUNTA)
