@@ -97,6 +97,17 @@ def test_uma_resposta_nao_e_eco(ouvido):
         ("python3 tool.py", ["python3"]),
         ("# limpar\nrm x", ["rm"]),
         ("ls # sem rm", ["ls"]),
+        # um apóstrofo num comentário não abre aspas, e a barra no fim de um comentário não continua a linha
+        ("cd foo # don't fail\nrm -rf build # it's stale", ["cd", "rm"]),
+        ("# don't\nrm x", ["rm"]),
+        ("echo a # c \\\nrm x", ["echo", "rm"]),
+        # o cardinal só abre um comentário no início de uma palavra
+        ("echo a#b; rm x", ["echo", "rm"]),
+        ("echo '# x'; rm y", ["echo", "rm"]),
+        ('echo "# \\" x"; rm y', ["echo", "rm"]),
+        ("A+=1 rm x", ["rm"]),
+        ("python3 tool.py --x -c", ["python3"]),
+        ("bash script.sh -e", ["bash"]),
     ],
 )
 def test_programas_de_um_comando(comando, esperado):
@@ -110,6 +121,9 @@ def test_programas_de_um_comando(comando, esperado):
         "echo $(whoami)", "echo `id`", "cat <(ls)", "(cd x && rm y)",
         "eval \"$X\"", "exec rm x", "source a.sh", ". a.sh", "ls | xargs rm", "timeout 5 rm x", "ssh host rm x",
         "bash -c 'rm x'", "sh -c 'rm x'", "zsh -lc 'rm x'", "python3 -c 'print(1)'", "node -e 'x'", "/bin/sh -c 'rm x'",
+        "bash -ec 'rm x'", "bash -xc 'rm x'", "sh -ec 'rm x'", "python3.11 -c 'x'", "perl -pe 'x' f", "php -r 'x'", "node -p 'x'", "ruby -e 'x'",
+        "/tmp/evil/git push", "~/bin/git push", "gtimeout 5 rm x", "caffeinate rm x", "stdbuf -o0 rm x", "npx qualquer", "noglob rm x",
+        "echo $(id) # c", "ls # c\necho `id`",
         "find . -name a -exec rm {} ;", "find . -delete",
         "for f in *; do rm $f; done", "if true; then rm x; fi", "while true; do rm x; done", "f() { rm x; }", "! rm x", "{ rm x; }",
         "$CMD x", "${CMD} x", "ls; $CMD", "{rm,x}", "r? x", "/bin/r* x", "sudo -u root rm x", "env -i rm x",

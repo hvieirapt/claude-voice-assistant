@@ -94,11 +94,37 @@ PREFIXOS = frozenset({"command", "nohup", "time", "env"})
 ESCONDEM = frozenset({
     "if", "then", "else", "elif", "fi", "for", "while", "until", "do", "done", "case", "esac", "select", "function", "coproc",
     "{", "}", "!", "[[", "alias", "builtin", "trap",
-    "eval", "exec", "source", ".", "xargs", "parallel", "timeout", "nice", "watch", "ssh", "su", "doas",
+    "eval", "exec", "source", ".", "xargs", "parallel", "timeout", "gtimeout", "nice", "ionice", "watch", "ssh", "su", "doas",
+    "caffeinate", "stdbuf", "unbuffer", "noglob", "npx", "bunx", "busybox", "flock", "chroot",
 })
-INTERPRETES = frozenset({"sh", "bash", "zsh", "dash", "fish", "python", "python3", "node", "perl", "ruby", "php", "osascript"})
-FLAGS_CODIGO = frozenset({"-c", "-e", "-lc", "-ic", "--eval"})
+# Com uma opção antes do script, um interpretador pode estar a correr código escrito na própria linha.
+INTERPRETE = re.compile(r"^(?:sh|bash|zsh|dash|ksh|fish|python|pypy|node|deno|bun|perl|ruby|php|lua|osascript)[\d.]*$")
+PASTAS_DO_SISTEMA = frozenset({"/bin", "/sbin", "/usr/bin", "/usr/sbin", "/usr/local/bin", "/opt/homebrew/bin"})
 ARGS_EXECUTAM = frozenset({"-exec", "-execdir", "-ok", "-okdir", "-delete"})
+
+
+def _sem_comentarios(comando: str) -> str:
+    """Retira os comentários, respeitando as aspas: um apóstrofo num comentário não abre nada."""
+    fora: list[str] = []
+    aspas = ""
+    i = 0
+    while i < len(comando):
+        c = comando[i]
+        if c == "\\" and aspas != "'" and i + 1 < len(comando):
+            fora.append(comando[i:i + 2])
+            i += 2
+            continue
+        if aspas:
+            aspas = "" if c == aspas else aspas
+        elif c in "'\"":
+            aspas = c
+        elif c == "#" and (not fora or fora[-1][-1] in " \t\r\n;&|()<>"):
+            while i < len(comando) and comando[i] != "\n":
+                i += 1
+            continue
+        fora.append(c)
+        i += 1
+    return "".join(fora)
 
 
 def programas(comando: str) -> list[str] | None:
@@ -106,9 +132,9 @@ def programas(comando: str) -> list[str] | None:
 
     Não é um interpretador de shell: reconhece as formas conhecidas de esconder o que corre.
     """
+    comando = _sem_comentarios(comando).replace("\\\n", "")  # e a continuação de linha, como a shell a trata
     if re.search(r"\$\(|`|<\(|>\(", comando):
         return None
-    comando = comando.replace("\\\n", "")  # continuação de linha, como a shell a trata
     lex = shlex.shlex(comando, posix=True, punctuation_chars="".join(OPERADORES))
     lex.whitespace = " \t\r"
     lex.whitespace_split = True
@@ -132,17 +158,15 @@ def programas(comando: str) -> list[str] | None:
                 return None
             continue
         if inicio:
-            if t.startswith("#"):
-                while i < len(toks) and "\n" not in toks[i]:
-                    i += 1
-                continue
-            nome = t.rsplit("/", 1)[-1]
-            if re.match(r"^\w+=", t) or nome in PREFIXOS:
+            pasta, _, nome = t.rpartition("/")
+            if re.match(r"^\w+\+?=", t) or nome in PREFIXOS:
                 i += 1
                 continue
+            if t.startswith(("/", "~")) and pasta not in PASTAS_DO_SISTEMA:
+                return None  # /tmp/git diria "git", sem ser o git
             if not nome or nome.startswith("-") or re.search(r"[$*?\[\]{}]", nome) or nome in ESCONDEM:
                 return None  # uma opção, ou um nome que só a shell sabe a que dá origem
-            if nome in INTERPRETES and any(x in FLAGS_CODIGO for x in toks[i + 1:]):
+            if INTERPRETE.match(nome) and i + 1 < len(toks) and toks[i + 1].startswith("-"):
                 return None
             res.append(nome)
             inicio = nome == "sudo"
