@@ -21,7 +21,9 @@ from claude_agent_sdk import (
     ToolUseBlock,
 )
 
-log = logging.getLogger("voz.cerebro")
+from .permissao import classificar_resposta
+
+log =logging.getLogger("voz.cerebro")
 
 ESTILO_FALADO = """
 Estás numa conversa por voz: o utilizador dita as mensagens e cada frase tua é dita em voz alta assim que termina.
@@ -98,8 +100,8 @@ class Cerebro:
     async def _can_use_tool(self, tool: str, inp: dict, ctx):
         """Pedido de permissão: pergunta por voz e aceita sim/não."""
         resposta = await self.perguntar(f"O Claude quer {descrever_tool(tool, inp)}. Permito?")
-        r = resposta.lower()
-        if any(w in r for w in ("sim", "pode", "permit", "autoriz", "força", "avança", "ok", "claro")) and "não" not in r:
+        # Sem diálogo a seguir neste caminho: só um sim claro aprova, tudo o resto recusa.
+        if classificar_resposta(resposta) == "allow":
             return PermissionResultAllow(behavior="allow")
         return PermissionResultDeny(behavior="deny", message=f"O utilizador recusou por voz: {resposta}")
 

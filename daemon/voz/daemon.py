@@ -31,6 +31,7 @@ from .config import load_config
 from .fala import Fala
 from .falante import limpar_markdown
 from .ouvido import Ouvido
+from .permissao import classificar_resposta
 from .ui import UI
 
 # O mod lê eventos JSON no stdout do processo; tudo o resto (prints de bibliotecas) vai para stderr.
@@ -364,25 +365,9 @@ class Daemon:
             return {"decision": "none", "reason": "sem resposta"}
         finally:
             self._resposta_fut = None
-        d = self._sim_ou_nao(texto)
+        d = classificar_resposta(texto)
         self.out("note", text={"allow": "permitido por voz", "deny": "recusado por voz"}.get(d, "não era uma resposta ao pedido; o diálogo fica à tua espera"))
-        return {"decision": d or "none", "text": texto}
-
-    @staticmethod
-    def _sim_ou_nao(texto: str) -> str | None:
-        SIM = ["sim", "pode", "permit", "autoriz", "aprov", "força", "avanç", "avanc", "ok", "claro", "deixa", "vai", "yes", "yeah", "yep", "allow", "approve", "go", "sure", "sí", "si", "vale", "oui", "ja", "okay", "va bene", "certo"]
-        NAO = ["não", "nao", "nega", "recus", "cancel", "pára", "para", "nunca", "no", "nope", "deny", "nein", "non", "nee", "bloque", "proib"]
-        t = re.sub(r"[.!?,;:¡¿]", " ", texto.lower())
-        w = t.split()
-        if not w or len(w) > 6:
-            return None
-        head = w[:2]
-        bate = lambda x, raizes: any(x == r or (len(r) >= 4 and x.startswith(r)) for r in raizes)
-        if any(bate(x, NAO) for x in head):
-            return "deny"
-        if any(bate(x, SIM) for x in head):
-            return "allow"
-        return None
+        return {"decision": d, "text": texto}
 
     # ---------- comandos ----------
     async def _on_cmd(self, cmd: dict) -> None:
