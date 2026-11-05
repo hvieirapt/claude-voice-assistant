@@ -59,6 +59,17 @@ to it over stdout events and a small HTTP API on `localhost:8765`.
 
 The interface language of the plugin's own labels is Portuguese; the spoken language is whatever you pick.
 
+## Security model
+
+- **Local API**: it listens on `127.0.0.1` only and serves its own panel, the plugin and the permission hook. Requests
+  with another `Host` or `Origin`, or a `POST` that isn't JSON, are refused. Open the panel at `http://localhost:8765` or
+  `http://127.0.0.1:8765`. There is no authentication, so other processes and other users on the same Mac can reach it.
+- **Approving by voice**: only a short, clear yes approves. A refusal denies, and anything else falls back to the normal
+  permission dialog. The voice doesn't check who is speaking, so anyone in the room can answer.
+- **What you hear**: the question names the programs in a command, not their arguments; the full command is in the
+  panel. Commands that can't be summarised with confidence go straight to the dialog. This is a best-effort reading of
+  the command, not a shell parser, so check anything sensitive in the dialog.
+
 ## License
 
 Public domain, under [The Unlicense](LICENSE).

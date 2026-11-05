@@ -1,6 +1,6 @@
 {
   "name": "voz",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Claude Voice Assistant: talk to Claude Code by voice, fully local (Whisper MLX + local TTS). One session becomes a hands-free assistant over all your sessions; permissions can be approved by voice.",
   "types": "./types/index.d.ts",
   "license": "Unlicense",

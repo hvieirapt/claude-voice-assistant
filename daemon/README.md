@@ -46,7 +46,8 @@ No painel há botão de carregar-para-falar (ou tecla Espaço), silenciar, parar
 No terminal: `/mudo`, `/ouvir`, `/parar` (cala a voz e interrompe o Claude), `/ptt`, `/auto`, `/sair`.
 
 Quando o Claude precisa de permissão para uma ferramenta, a pergunta é dita em voz alta e a tua
-próxima frase é a resposta ("sim" / "não").
+próxima frase é a resposta ("sim" / "não"). Só um sim claro aprova: em `voz`, tudo o resto recusa; no plugin, uma
+recusa recusa e o que for ambíguo segue para o diálogo normal.
 
 ## O que o microfone ouve
 
