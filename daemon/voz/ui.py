@@ -1,4 +1,8 @@
-"""Painel web local: estado em tempo real por SSE e comandos por POST. Sem dependências."""
+"""Painel web local: estado em tempo real por SSE e comandos por POST. Sem dependências.
+
+Só aceita o próprio painel e clientes locais sem browser (hook, mod). O bind a 127.0.0.1 não chega:
+quem faz o pedido pode ser o browser do utilizador, a mando de uma página qualquer.
+"""
 
 from __future__ import annotations
 
@@ -10,6 +14,7 @@ from typing import Any, Awaitable, Callable
 
 log = logging.getLogger("voz.ui")
 INDEX = Path(__file__).with_name("static") / "index.html"
+ESTADOS = {200: "OK", 400: "Bad Request", 403: "Forbidden", 404: "Not Found", 415: "Unsupported Media Type"}
 
 
 class UI:
@@ -65,6 +70,11 @@ class UI:
             writer.close(); return
         headers = {k.lower(): v for k, _, v in (l.partition(":") for l in lines[1:] if ":" in l)}
         headers = {k: v.strip() for k, v in headers.items()}
+        recusa = self._recusa(method, path, headers)
+        if recusa:
+            log.warning("pedido recusado (%d): %s %s host=%r origin=%r content-type=%r", recusa, method, path, headers.get("host"), headers.get("origin"), headers.get("content-type"))
+            self._respond(writer, recusa, "text/plain", b"recusado"); await writer.drain(); writer.close()
+            return
         body = b""
         n = int(headers.get("content-length", "0") or 0)
         if n:
@@ -73,7 +83,7 @@ class UI:
         if method == "GET" and path == "/":
             self._respond(writer, 200, "text/html; charset=utf-8", INDEX.read_bytes()); await writer.drain(); writer.close()
         elif method == "GET" and path == "/events":
-            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nConnection: keep-alive\r\nAccess-Control-Allow-Origin: *\r\n\r\n")
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nConnection: keep-alive\r\n\r\n")
             for ev in self._history[-80:]:
                 writer.write(f"data: {json.dumps(ev, ensure_ascii=False)}\n\n".encode())
             await writer.drain()
@@ -98,6 +108,23 @@ class UI:
         else:
             self._respond(writer, 404, "text/plain", b"nada aqui"); await writer.drain(); writer.close()
 
+    def _recusa(self, method: str, path: str, headers: dict[str, str]) -> int | None:
+        """Devolve o código de erro se o pedido não puder ser servido, ou None se puder."""
+        hosts = {f"127.0.0.1:{self.port}", f"localhost:{self.port}"}
+        if headers.get("host", "").lower() not in hosts:
+            return 403  # DNS rebinding: a página fala com o servidor sob outro nome
+        origin = headers.get("origin")
+        if origin is not None and origin.lower() not in {f"http://{h}" for h in hosts}:
+            return 403  # outra página; sem Origin são clientes sem browser, como o hook
+        if method == "POST" and path == "/cmd":
+            tipo = headers.get("content-type", "").split(";")[0].strip().lower()
+            if tipo != "application/json":
+                return 415  # outro tipo não dispara o preflight do browser
+        return None
+
     @staticmethod
     def _respond(writer: asyncio.StreamWriter, status: int, ctype: str, body: bytes) -> None:
-        writer.write(f"HTTP/1.1 {status} OK\r\nContent-Type: {ctype}\r\nContent-Length: {len(body)}\r\nConnection: close\r\n\r\n".encode() + body)
+        writer.write(
+            f"HTTP/1.1 {status} {ESTADOS.get(status, 'OK')}\r\nContent-Type: {ctype}\r\nContent-Length: {len(body)}\r\n"
+            f"X-Frame-Options: DENY\r\nConnection: close\r\n\r\n".encode() + body
+        )
